@@ -1,6 +1,6 @@
 # Manga Chapter & Image Scraper
 
-![Manga Downloader Banner](https://raw.githubusercontent.com/username/manga-scraper/main/assets/banner.png)
+![Manga Downloader Banner](https://raw.githubusercontent.com/MohiuddinSumon/manga-scraper/main/assets/banner.png)
 
 A streamlined Python application that allows users to download manga chapters and images from various websites. Built with Streamlit and BeautifulSoup, this tool provides an intuitive interface for both downloading and browsing manga content.
 
@@ -64,8 +64,9 @@ A streamlined Python application that allows users to download manga chapters an
 
 The enhanced image viewer supports:
 - **Keyboard Navigation:** Use arrow keys (or A/D) to move between pages
-- **Zoom Controls:** Use +/- keys or buttons to zoom in/out
-- **Reset View:** Press 0 to reset zoom level
+- **Zoom Controls:** Use z/c keys or buttons to zoom in/out
+- **Full Screen:** Use f to go fullscreen
+- **Reset View:** Press x to reset zoom level
 - **Responsive Design:** Adapts to different screen sizes
 
 ### Example Workflow
