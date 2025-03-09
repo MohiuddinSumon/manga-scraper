@@ -8,9 +8,10 @@ A streamlined Python application that allows users to download manga chapters an
 
 - **Easy URL Input:** Simply paste the main manga page URL and the app handles the rest
 - **Smart Chapter Detection:** Automatically finds all available chapters using customizable regex patterns
-- **Selective Downloads:** Choose which specific chapters to download rather than getting everything
+- **Selective Downloads:** Choose which specific chapters to download or use "Download All" option
+- **Skip Existing Chapters:** Efficiently skip already downloaded chapters to resume interrupted downloads
 - **Organized Storage:** Content saved in a clean folder structure for easy access
-- **Built-in Browser:** View downloaded manga directly in the app with an easy-to-use image viewer
+- **Advanced Image Viewer:** View manga with keyboard navigation, zoom controls, and full-screen capability
 - **Rate Limiting:** Configurable delay between requests to be respectful to source websites
 - **Responsive UI:** Real-time progress tracking and status updates
 
@@ -56,23 +57,32 @@ A streamlined Python application that allows users to download manga chapters an
    - Optional: Specify a container selector for more precise image targeting
    - Adjust delay between requests if needed
    - Click "Fetch Chapters" to detect available content
-   - Select which chapters to download
-   - Use the "Browse" tab to view downloaded manga
+   - Select which chapters to download or use "Download All"
+   - Use the "Browse" tab to view downloaded manga with enhanced viewing capabilities
+
+### Image Viewer Controls
+
+The enhanced image viewer supports:
+- **Keyboard Navigation:** Use arrow keys (or A/D) to move between pages
+- **Zoom Controls:** Use +/- keys or buttons to zoom in/out
+- **Reset View:** Press 0 to reset zoom level
+- **Responsive Design:** Adapts to different screen sizes
 
 ### Example Workflow
 
 1. Input URL: `https://example-manga-site.com/manga/title`
 2. Regex: `r"chapter-(\d+)"`
 3. Press "Fetch Chapters"
-4. Select chapters from the list
-5. Click "Download Selected Chapters"
-6. Switch to "Browse" tab to view downloaded content
+4. Click "Download All" (it will skip any chapters already downloaded)
+5. Switch to "Browse" tab to view downloaded content
+6. Use keyboard shortcuts for a seamless reading experience
 
 ### Tips for Effective Use
 
 - **Finding the right regex:** Examine the chapter URLs on the website and identify the pattern. Most sites use formats like `chapter-123` or `ch-123`.
 - **Container selector (advanced):** Right-click on the manga page and "Inspect Element" to find the CSS selector for the container holding only the manga images.
 - **Rate limiting:** Increase the delay for sites that might block rapid requests.
+- **Skip existing:** Keep this enabled to continue interrupted downloads without duplicating content.
 
 ## 📁 Project Structure
 
@@ -100,6 +110,7 @@ manga-scraper/
 | Regex Pattern | Regular expression to extract chapter numbers | `r"chapter-(\d+)"` |
 | Container Selector | CSS selector for the element containing manga images | Optional |
 | Request Delay | Time between requests (seconds) | 1.0 |
+| Skip Existing Chapters | Skip chapters that have already been downloaded | Enabled |
 
 ## 🤝 Contributing
 
