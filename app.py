@@ -278,9 +278,9 @@ def get_image_data_url(file_path):
     return f"data:{mime_type};base64,{encoded_string}"
 
 
-# Create custom HTML for advanced image viewer
+# Create custom HTML for advanced image viewer with Streamlit buttons for navigation
 def create_image_viewer_html(images, current_index):
-    """Create HTML for a custom image viewer with keyboard controls and zoom using base64 images"""
+    """Create HTML for a custom image viewer with zoom using base64 images, but navigation through Streamlit"""
     if not images:
         return "<p>No images available</p>"
 
@@ -314,7 +314,7 @@ def create_image_viewer_html(images, current_index):
             transform-origin: center;
             transition: transform 0.2s;
         }}
-        .controls {{
+        .zoom-controls {{
             position: fixed;
             bottom: 10px;
             left: 0;
@@ -329,7 +329,7 @@ def create_image_viewer_html(images, current_index):
             text-align: center;
             user-select: none;
         }}
-        .controls button {{
+        .zoom-controls button {{
             background: #4CAF50;
             border: none;
             color: white;
@@ -337,13 +337,6 @@ def create_image_viewer_html(images, current_index):
             margin: 0 5px;
             cursor: pointer;
             border-radius: 3px;
-        }}
-        .page-indicator {{
-            margin: 0 15px;
-            font-weight: bold;
-        }}
-        .zoom-controls {{
-            margin-left: 15px;
         }}
     </style>
     
@@ -353,62 +346,19 @@ def create_image_viewer_html(images, current_index):
         </div>
     </div>
     
-    <div class="controls">
-        <button id="prev-btn-{viewer_id}">◀ Previous</button>
-        <span class="page-indicator">{current_index + 1} / {len(images)}</span>
-        <button id="next-btn-{viewer_id}">Next ▶</button>
-        <span class="zoom-controls">
-            <button id="zoom-out-{viewer_id}">🔍-</button>
-            <button id="zoom-reset-{viewer_id}">🔍100%</button>
-            <button id="zoom-in-{viewer_id}">🔍+</button>
-        </span>
+    <div class="zoom-controls">
+        <button id="zoom-out-{viewer_id}">🔍-</button>
+        <button id="zoom-reset-{viewer_id}">🔍100%</button>
+        <button id="zoom-in-{viewer_id}">🔍+</button>
     </div>
     
     <script>
         // Current zoom level
         let zoomLevel = 1;
         
-        // Update Streamlit session state
-        const sendMessageToStreamlit = (index) => {{
-            window.parent.postMessage({{
-                type: "streamlit:setComponentValue",
-                value: index
-            }}, "*");
-        }};
-
-        const sendMessageToStreamlit_D = (index) => {{
-            // Update URL parameter to trigger Streamlit rerun
-            const params = new URLSearchParams(window.location.search);
-            params.set('image_index', index);
-            window.history.replaceState({{}}, '', '?' + params.toString());
-            
-            // Also send message directly to Streamlit
-            window.parent.postMessage({{
-                type: "streamlit:setComponentValue",
-                value: index
-            }}, "*");
-            
-            // Force reload to ensure the new image is displayed
-            window.parent.location.reload();
-        }};
-        
-        // Handle keyboard navigation
+        // Handle keyboard shortcuts for zooming only
         document.addEventListener('keydown', function(e) {{
-            if (e.key === 'ArrowLeft' || e.key === 'a') {{
-                console.log('Left arrow pressed');
-                console.log({current_index});
-                console.log(e.key);
-                if ({current_index} > 0) {{
-                    sendMessageToStreamlit({current_index - 1});
-                }}
-            }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
-                console.log('Right arrow pressed');
-                console.log({current_index});
-                console.log(e.key);
-                if ({current_index} < {len(images) - 1}) {{
-                    sendMessageToStreamlit({current_index + 1});
-                }}
-            }} else if (e.key === '+' || e.key === '=') {{
+            if (e.key === '+' || e.key === '=') {{
                 zoomIn();
             }} else if (e.key === '-') {{
                 zoomOut();
@@ -416,8 +366,6 @@ def create_image_viewer_html(images, current_index):
                 resetZoom();
             }}
         }});
-        
-        
         
         // Get the image element
         const image = document.getElementById('manga-image-{viewer_id}');
@@ -438,24 +386,10 @@ def create_image_viewer_html(images, current_index):
             image.style.transform = 'scale(1)';
         }}
         
-
-        // Button click handlers
-        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} > 0) {{
-                sendMessageToStreamlit({current_index - 1});
-            }}
-        }});
-        
-        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} < {len(images) - 1}) {{
-                sendMessageToStreamlit({current_index + 1});
-            }}
-        }});
         // Add click handlers for zoom buttons
-        document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
         document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
         document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
-
+        document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
     </script>
     """
     return html
@@ -663,7 +597,7 @@ with tab2:
                     if not chapter_images:
                         st.info(f"No images found in {selected_chapter}")
                     else:
-                        # Image viewer with advanced controls
+                        # Image viewer with Streamlit navigation and JS zoom controls
                         total_images = len(chapter_images)
 
                         # Check if we need to initialize the image index
@@ -674,34 +608,36 @@ with tab2:
                         if st.session_state.image_index >= total_images:
                             st.session_state.image_index = 0
 
-                        # Use the custom HTML viewer
+                        # Add Streamlit navigation buttons before the image viewer
+                        col1, col2, col3 = st.columns([1, 3, 1])
+
+                        with col1:
+                            if st.button("◀ Previous"):
+                                if st.session_state.image_index > 0:
+                                    st.session_state.image_index -= 1
+                                    st.rerun()
+
+                        with col2:
+                            st.write(
+                                f"**Page {st.session_state.image_index + 1} of {total_images}**"
+                            )
+
+                        with col3:
+                            if st.button("Next ▶"):
+                                if st.session_state.image_index < total_images - 1:
+                                    st.session_state.image_index += 1
+                                    st.rerun()
+
+                        # Use the modified HTML viewer (no navigation, just zoom)
                         viewer_html = create_image_viewer_html(
                             chapter_images, st.session_state.image_index
                         )
-
-                        # Get the new index from the component
-                        received_value = components.html(
-                            viewer_html, height=600, scrolling=True
-                        )
-
-                        # Check if we received a value from the component
-                        if received_value is not None and isinstance(
-                            received_value, (int, float)
-                        ):
-                            new_index = int(received_value)
-                            if (
-                                0 <= new_index < total_images
-                                and new_index != st.session_state.image_index
-                            ):
-                                st.session_state.image_index = new_index
-                                st.rerun()
+                        components.html(viewer_html, height=600, scrolling=True)
 
                         # Display info about keyboard shortcuts
                         with st.expander("Keyboard Shortcuts"):
                             st.write(
                                 """
-                            - **Left Arrow** or **A**: Previous image
-                            - **Right Arrow** or **D**: Next image
                             - **+** or **=**: Zoom in
                             - **-**: Zoom out
                             - **0**: Reset zoom
