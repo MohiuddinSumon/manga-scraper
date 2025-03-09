@@ -280,17 +280,23 @@ def get_image_data_url(file_path):
 
 # Create custom HTML for advanced image viewer with Streamlit buttons for navigation and clickable sides
 def create_image_viewer_html(images, current_index):
-    """Create HTML for a custom image viewer with zoom using base64 images, fullscreen mode, and clickable sides"""
+    """Create HTML for a custom image viewer with preloaded images"""
     if not images:
         return "<p>No images available</p>"
 
-    current_image = images[current_index]
-
-    # Convert image to base64 data URL
-    image_data_url = get_image_data_url(current_image)
-
     # Create a unique ID for the viewer div to avoid caching issues
-    viewer_id = hashlib.md5(current_image.encode()).hexdigest()[:8]
+    viewer_id = hashlib.md5(str(time.time()).encode()).hexdigest()[:8]
+
+    # Prepare image data URLs for all images
+    image_data_urls = {}
+    for i, img_path in enumerate(images):
+        image_data_urls[i] = get_image_data_url(img_path)
+
+    # Convert the image_data_urls dictionary to a JavaScript object
+    js_image_data = "{"
+    for idx, data_url in image_data_urls.items():
+        js_image_data += f'"{idx}": "{data_url}",'
+    js_image_data = js_image_data.rstrip(",") + "}"
 
     html = f"""
     <style>
@@ -355,9 +361,11 @@ def create_image_viewer_html(images, current_index):
         }}
         #prev-overlay-{viewer_id} {{
             left: 0;
+            cursor: w-resize;
         }}
         #next-overlay-{viewer_id} {{
             right: 0;
+            cursor: e-resize;
         }}
         .fullscreen {{
             position: fixed;
@@ -383,11 +391,23 @@ def create_image_viewer_html(images, current_index):
             font-size: 30px;
             cursor: pointer;
         }}
+        .loader {{
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 5px;
+            z-index: 3000;
+            display: none;
+        }}
     </style>
     
     <div id="viewer-{viewer_id}">
         <div id="img-container-{viewer_id}">
-            <img id="manga-image-{viewer_id}" src="{image_data_url}" alt="Manga page">
+            <img id="manga-image-{viewer_id}" src="{image_data_urls[current_index]}" alt="Manga page">
             <div id="prev-overlay-{viewer_id}" class="nav-overlay"></div>
             <div id="next-overlay-{viewer_id}" class="nav-overlay"></div>
         </div>
@@ -395,8 +415,10 @@ def create_image_viewer_html(images, current_index):
     
     <div id="fullscreen-container-{viewer_id}" style="display: none;" class="fullscreen">
         <div class="close-fullscreen" id="close-fullscreen-{viewer_id}">×</div>
-        <img id="fullscreen-image-{viewer_id}" src="{image_data_url}" alt="Fullscreen manga page">
+        <img id="fullscreen-image-{viewer_id}" src="{image_data_urls[current_index]}" alt="Fullscreen manga page">
     </div>
+    
+    <div id="loader-{viewer_id}" class="loader">Loading...</div>
     
     <div class="controls">
         <div>
@@ -407,38 +429,109 @@ def create_image_viewer_html(images, current_index):
         </div>
         <div style="margin-top: 10px;">
             <button id="prev-btn-{viewer_id}">◀ Previous</button>
-            <span class="page-indicator">{current_index + 1} / {len(images)}</span>
+            <span class="page-indicator" id="page-indicator-{viewer_id}">{current_index + 1} / {len(images)}</span>
             <button id="next-btn-{viewer_id}">Next ▶</button>
         </div>
     </div>
     
     <script>
-        // Current zoom level
+        // Store all image data
+        const imageData = {js_image_data};
+        const totalImages = {len(images)};
+        let currentIndex = {current_index};
         let zoomLevel = 1;
         
         // Get elements
         const image = document.getElementById('manga-image-{viewer_id}');
-        const fullscreenContainer = document.getElementById('fullscreen-container-{viewer_id}');
         const fullscreenImage = document.getElementById('fullscreen-image-{viewer_id}');
+        const fullscreenContainer = document.getElementById('fullscreen-container-{viewer_id}');
+        const pageIndicator = document.getElementById('page-indicator-{viewer_id}');
+        const loader = document.getElementById('loader-{viewer_id}');
         
-        // Update Streamlit session state
-        const sendMessageToStreamlit = (index) => {{
-            window.parent.postMessage({{
-                type: "streamlit:setComponentValue",
-                value: index
-            }}, "*");
-        }};
+        // Function to update the displayed image
+        function updateImage(index) {{
+            // Show loader
+            loader.style.display = 'block';
+            
+            // Update current index
+            currentIndex = index;
+            
+            // Create a new Image object to preload
+            const newImg = new Image();
+            
+            // Set up the onload handler
+            newImg.onload = function() {{
+                // Update both regular and fullscreen images
+                image.src = imageData[index];
+                fullscreenImage.src = imageData[index];
+                
+                // Update page indicator
+                pageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
+                
+                // Hide loader after image is loaded
+                loader.style.display = 'none';
+            }};
+            
+            // Set the src to trigger loading
+            newImg.src = imageData[index];
+            
+            // Update Streamlit's session state by changing the URL fragment
+            // This doesn't cause a page reload but lets us record the state
+            window.location.hash = `#page=${{index}}`;
+        }}
+        
+        // Navigation functions
+        function goToPrevious() {{
+            if (currentIndex > 0) {{
+                updateImage(currentIndex - 1);
+            }}
+        }}
+        
+        function goToNext() {{
+            if (currentIndex < totalImages - 1) {{
+                updateImage(currentIndex + 1);
+            }}
+        }}
+        
+        // Zoom functions
+        function zoomIn() {{
+            zoomLevel = Math.min(zoomLevel + 0.1, 3);
+            image.style.transform = `scale(${{zoomLevel}})`;
+            fullscreenImage.style.transform = `scale(${{zoomLevel}})`;
+        }}
+        
+        function zoomOut() {{
+            zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+            image.style.transform = `scale(${{zoomLevel}})`;
+            fullscreenImage.style.transform = `scale(${{zoomLevel}})`;
+        }}
+        
+        function resetZoom() {{
+            zoomLevel = 1;
+            image.style.transform = 'scale(1)';
+            fullscreenImage.style.transform = 'scale(1)';
+        }}
+        
+        // Fullscreen functions
+        function toggleFullscreen() {{
+            fullscreenContainer.style.display = 'flex';
+        }}
+        
+        function closeFullscreen() {{
+            fullscreenContainer.style.display = 'none';
+        }}
         
         // Handle keyboard shortcuts
         document.addEventListener('keydown', function(e) {{
+            // Prevent default behavior for navigation keys
+            if (['ArrowLeft', 'ArrowRight', 'a', 'd', '+', '-', '0', 'f'].includes(e.key)) {{
+                e.preventDefault();
+            }}
+            
             if (e.key === 'ArrowLeft' || e.key === 'a') {{
-                if ({current_index} > 0) {{
-                    sendMessageToStreamlit({current_index - 1});
-                }}
+                goToPrevious();
             }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
-                if ({current_index} < {len(images) - 1}) {{
-                    sendMessageToStreamlit({current_index + 1});
-                }}
+                goToNext();
             }} else if (e.key === '+' || e.key === '=') {{
                 zoomIn();
             }} else if (e.key === '-') {{
@@ -452,71 +545,41 @@ def create_image_viewer_html(images, current_index):
             }}
         }});
         
-        // Zoom functions
-        function zoomIn() {{
-            zoomLevel = Math.min(zoomLevel + 0.1, 3);
-            image.style.transform = `scale(${{zoomLevel}})`;
-        }}
-        
-        function zoomOut() {{
-            zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
-            image.style.transform = `scale(${{zoomLevel}})`;
-        }}
-        
-        function resetZoom() {{
-            zoomLevel = 1;
-            image.style.transform = 'scale(1)';
-        }}
-        
-        // Fullscreen functions
-        function toggleFullscreen() {{
-            fullscreenContainer.style.display = 'flex';
-        }}
-        
-        function closeFullscreen() {{
-            fullscreenContainer.style.display = 'none';
-        }}
-        
         // Add navigation click handlers
-        document.getElementById('prev-overlay-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} > 0) {{
-                sendMessageToStreamlit({current_index - 1});
-            }}
-        }});
+        document.getElementById('prev-overlay-{viewer_id}').addEventListener('click', goToPrevious);
+        document.getElementById('next-overlay-{viewer_id}').addEventListener('click', goToNext);
+        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', goToPrevious);
+        document.getElementById('next-btn-{viewer_id}').addEventListener('click', goToNext);
         
-        document.getElementById('next-overlay-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} < {len(images) - 1}) {{
-                sendMessageToStreamlit({current_index + 1});
-            }}
-        }});
-        
-        // Add button click handlers
-        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} > 0) {{
-                sendMessageToStreamlit({current_index - 1});
-            }}
-        }});
-        
-        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} < {len(images) - 1}) {{
-                sendMessageToStreamlit({current_index + 1});
-            }}
-        }});
-        
-        // Add click handlers for zoom and fullscreen buttons
+        // Add zoom and fullscreen handlers
         document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
         document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
         document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
         document.getElementById('fullscreen-btn-{viewer_id}').addEventListener('click', toggleFullscreen);
         document.getElementById('close-fullscreen-{viewer_id}').addEventListener('click', closeFullscreen);
         
-        // Also allow clicking the fullscreen image to close it
+        // Prevent click propagation for fullscreen image
         fullscreenImage.addEventListener('click', function(e) {{
-            // Prevent the click from propagating to other elements
             e.stopPropagation();
         }});
         
+        // Close fullscreen when clicking on the container
         fullscreenContainer.addEventListener('click', closeFullscreen);
+        
+        // Handle fragment identifier changes to maintain state on page refresh
+        window.addEventListener('load', function() {{
+            const fragment = window.location.hash;
+            const pageMatch = fragment.match(/#page=(\d+)/);
+            if (pageMatch && pageMatch[1]) {{
+                const savedPage = parseInt(pageMatch[1]);
+                if (savedPage >= 0 && savedPage < totalImages && savedPage !== currentIndex) {{
+                    updateImage(savedPage);
+                }}
+            }}
+        }});
+        
+        // Initialize the page indicator
+        pageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
     </script>
     """
     return html
@@ -724,7 +787,7 @@ with tab2:
                     if not chapter_images:
                         st.info(f"No images found in {selected_chapter}")
                     else:
-                        # Image viewer with improved controls
+                        # Image viewer with preloaded images
                         total_images = len(chapter_images)
 
                         # Initialize the session state for image index if it doesn't exist
@@ -735,46 +798,32 @@ with tab2:
                         if st.session_state.image_index >= total_images:
                             st.session_state.image_index = 0
 
-                        # Create a unique key for this component
-                        component_key = f"{selected_manga}_{selected_chapter}_{st.session_state.image_index}"
-
-                        # Use the improved HTML viewer with clickable sides
+                        # Create the viewer HTML with all images preloaded
                         viewer_html = create_image_viewer_html(
                             chapter_images, st.session_state.image_index
                         )
 
-                        # Get the new index from the component
-                        new_index = components.html(
-                            viewer_html, height=800, scrolling=True
-                        )
+                        # Display the viewer
+                        components.html(viewer_html, height=800, scrolling=True)
 
-                        # Check if we received a value from the component
-                        if new_index is not None and isinstance(
-                            new_index, (int, float)
-                        ):
-                            new_index = int(new_index)
-                            # Check if the new index is valid and different
-                            if (
-                                0 <= new_index < total_images
-                                and new_index != st.session_state.image_index
-                            ):
-                                # Update the session state
-                                st.session_state.image_index = new_index
-                                # Trigger a rerun to update the view
-                                st.rerun()
+                        # Add warning about memory usage for large chapters
+                        if total_images > 30:
+                            st.warning(
+                                f"This chapter has {total_images} images. If you experience performance issues, try reloading the page."
+                            )
 
                         # Display info about keyboard shortcuts
                         with st.expander("Keyboard Shortcuts"):
                             st.write(
                                 """
-                            - **Left Arrow** or **A**: Previous image
-                            - **Right Arrow** or **D**: Next image
-                            - **+** or **=**: Zoom in
-                            - **-**: Zoom out
-                            - **0**: Reset zoom
-                            - **F**: Toggle fullscreen
-                            - **Escape**: Exit fullscreen
-                            """
+                                - **Left Arrow** or **A**: Previous image
+                                - **Right Arrow** or **D**: Next image
+                                - **+** or **=**: Zoom in
+                                - **-**: Zoom out
+                                - **0**: Reset zoom
+                                - **F**: Toggle fullscreen
+                                - **Escape**: Exit fullscreen
+                                """
                             )
 
 
