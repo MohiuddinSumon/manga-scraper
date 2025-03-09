@@ -375,14 +375,36 @@ def create_image_viewer_html(images, current_index):
                 value: index
             }}, "*");
         }};
+
+        const sendMessageToStreamlit_D = (index) => {{
+            // Update URL parameter to trigger Streamlit rerun
+            const params = new URLSearchParams(window.location.search);
+            params.set('image_index', index);
+            window.history.replaceState({{}}, '', '?' + params.toString());
+            
+            // Also send message directly to Streamlit
+            window.parent.postMessage({{
+                type: "streamlit:setComponentValue",
+                value: index
+            }}, "*");
+            
+            // Force reload to ensure the new image is displayed
+            window.parent.location.reload();
+        }};
         
         // Handle keyboard navigation
         document.addEventListener('keydown', function(e) {{
             if (e.key === 'ArrowLeft' || e.key === 'a') {{
+                console.log('Left arrow pressed');
+                console.log({current_index});
+                console.log(e.key);
                 if ({current_index} > 0) {{
                     sendMessageToStreamlit({current_index - 1});
                 }}
             }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
+                console.log('Right arrow pressed');
+                console.log({current_index});
+                console.log(e.key);
                 if ({current_index} < {len(images) - 1}) {{
                     sendMessageToStreamlit({current_index + 1});
                 }}
@@ -395,18 +417,7 @@ def create_image_viewer_html(images, current_index):
             }}
         }});
         
-        // Button click handlers
-        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} > 0) {{
-                sendMessageToStreamlit({current_index - 1});
-            }}
-        }});
         
-        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} < {len(images) - 1}) {{
-                sendMessageToStreamlit({current_index + 1});
-            }}
-        }});
         
         // Get the image element
         const image = document.getElementById('manga-image-{viewer_id}');
@@ -427,10 +438,24 @@ def create_image_viewer_html(images, current_index):
             image.style.transform = 'scale(1)';
         }}
         
+
+        // Button click handlers
+        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} > 0) {{
+                sendMessageToStreamlit({current_index - 1});
+            }}
+        }});
+        
+        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} < {len(images) - 1}) {{
+                sendMessageToStreamlit({current_index + 1});
+            }}
+        }});
         // Add click handlers for zoom buttons
         document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
         document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
         document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
+
     </script>
     """
     return html
@@ -653,19 +678,23 @@ with tab2:
                         viewer_html = create_image_viewer_html(
                             chapter_images, st.session_state.image_index
                         )
-                        components.html(viewer_html, height=600, scrolling=True)
 
-                        # Get new index from the component callback using st.query_params
-                        if "image_index" in st.query_params:
-                            new_index = st.query_params["image_index"]
-                            if new_index is not None and new_index.isdigit():
-                                new_index = int(new_index)
-                                if (
-                                    0 <= new_index < total_images
-                                    and new_index != st.session_state.image_index
-                                ):
-                                    st.session_state.image_index = new_index
-                                    st.rerun()
+                        # Get the new index from the component
+                        received_value = components.html(
+                            viewer_html, height=600, scrolling=True
+                        )
+
+                        # Check if we received a value from the component
+                        if received_value is not None and isinstance(
+                            received_value, (int, float)
+                        ):
+                            new_index = int(received_value)
+                            if (
+                                0 <= new_index < total_images
+                                and new_index != st.session_state.image_index
+                            ):
+                                st.session_state.image_index = new_index
+                                st.rerun()
 
                         # Display info about keyboard shortcuts
                         with st.expander("Keyboard Shortcuts"):
