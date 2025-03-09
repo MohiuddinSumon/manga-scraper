@@ -279,6 +279,7 @@ def get_image_data_url(file_path):
 
 
 # Create custom HTML for advanced image viewer with Streamlit buttons for navigation and clickable sides
+# Create custom HTML for advanced image viewer with improved fullscreen and scrolling behavior
 def create_image_viewer_html(images, current_index):
     """Create HTML for a custom image viewer with preloaded images"""
     if not images:
@@ -378,18 +379,29 @@ def create_image_viewer_html(images, current_index):
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: auto; /* Enable scrolling in fullscreen */
+        }}
+        .fullscreen-content {{
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+            width: 100%;
         }}
         .fullscreen img {{
             max-height: 95vh;
             max-width: 95vw;
+            object-fit: contain;
         }}
         .close-fullscreen {{
-            position: absolute;
+            position: fixed;
             top: 20px;
             right: 20px;
             color: white;
             font-size: 30px;
             cursor: pointer;
+            z-index: 3001;
         }}
         .loader {{
             position: fixed;
@@ -403,6 +415,19 @@ def create_image_viewer_html(images, current_index):
             z-index: 3000;
             display: none;
         }}
+        .fullscreen-controls {{
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            margin: auto;
+            z-index: 3001;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            width: fit-content;
+        }}
     </style>
     
     <div id="viewer-{viewer_id}">
@@ -415,17 +440,27 @@ def create_image_viewer_html(images, current_index):
     
     <div id="fullscreen-container-{viewer_id}" style="display: none;" class="fullscreen">
         <div class="close-fullscreen" id="close-fullscreen-{viewer_id}">×</div>
-        <img id="fullscreen-image-{viewer_id}" src="{image_data_urls[current_index]}" alt="Fullscreen manga page">
+        <div class="fullscreen-content" id="fullscreen-content-{viewer_id}">
+            <img id="fullscreen-image-{viewer_id}" src="{image_data_urls[current_index]}" alt="Fullscreen manga page">
+        </div>
+        <div class="fullscreen-controls">
+            <button id="fs-zoom-out-{viewer_id}">🔍- (Z)</button>
+            <button id="fs-zoom-reset-{viewer_id}">🔍100% (X)</button>
+            <button id="fs-zoom-in-{viewer_id}">🔍+ (C)</button>
+            <button id="fs-prev-btn-{viewer_id}">◀ Previous</button>
+            <span class="page-indicator" id="fs-page-indicator-{viewer_id}">{current_index + 1} / {len(images)}</span>
+            <button id="fs-next-btn-{viewer_id}">Next ▶</button>
+        </div>
     </div>
     
     <div id="loader-{viewer_id}" class="loader">Loading...</div>
     
     <div class="controls">
         <div>
-            <button id="zoom-out-{viewer_id}">🔍-</button>
-            <button id="zoom-reset-{viewer_id}">🔍100%</button>
-            <button id="zoom-in-{viewer_id}">🔍+</button>
-            <button id="fullscreen-btn-{viewer_id}">⛶ Fullscreen</button>
+            <button id="zoom-out-{viewer_id}">🔍- (Z)</button>
+            <button id="zoom-reset-{viewer_id}">🔍100% (X)</button>
+            <button id="zoom-in-{viewer_id}">🔍+ (C)</button>
+            <button id="fullscreen-btn-{viewer_id}">⛶ Fullscreen (F)</button>
         </div>
         <div style="margin-top: 10px;">
             <button id="prev-btn-{viewer_id}">◀ Previous</button>
@@ -440,12 +475,16 @@ def create_image_viewer_html(images, current_index):
         const totalImages = {len(images)};
         let currentIndex = {current_index};
         let zoomLevel = 1;
+        let fsZoomLevel = 1;
         
         // Get elements
+        const viewer = document.getElementById('viewer-{viewer_id}');
         const image = document.getElementById('manga-image-{viewer_id}');
         const fullscreenImage = document.getElementById('fullscreen-image-{viewer_id}');
         const fullscreenContainer = document.getElementById('fullscreen-container-{viewer_id}');
+        const fullscreenContent = document.getElementById('fullscreen-content-{viewer_id}');
         const pageIndicator = document.getElementById('page-indicator-{viewer_id}');
+        const fsPageIndicator = document.getElementById('fs-page-indicator-{viewer_id}');
         const loader = document.getElementById('loader-{viewer_id}');
         
         // Function to update the displayed image
@@ -465,8 +504,22 @@ def create_image_viewer_html(images, current_index):
                 image.src = imageData[index];
                 fullscreenImage.src = imageData[index];
                 
-                // Update page indicator
+                // Update page indicators
                 pageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
+                fsPageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
+                
+                // Reset zoom
+                // resetZoom();
+                // resetFsZoom();
+
+                 // Apply current zoom levels instead of resetting
+                image.style.transform = `scale(${{zoomLevel}})`;
+                fullscreenImage.style.transform = `scale(${{fsZoomLevel}})`;
+                
+                // Scroll back to top
+                viewer.scrollTop = 0;
+                fullscreenContainer.scrollTop = 0;
+                fullscreenContainer.scrollLeft = 0;
                 
                 // Hide loader after image is loaded
                 loader.style.display = 'none';
@@ -495,26 +548,40 @@ def create_image_viewer_html(images, current_index):
         
         // Zoom functions
         function zoomIn() {{
-            zoomLevel = Math.min(zoomLevel + 0.1, 3);
+            zoomLevel = Math.min(zoomLevel + 0.2, 5);
             image.style.transform = `scale(${{zoomLevel}})`;
-            fullscreenImage.style.transform = `scale(${{zoomLevel}})`;
         }}
         
         function zoomOut() {{
-            zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+            zoomLevel = Math.max(zoomLevel - 0.2, 0.5);
             image.style.transform = `scale(${{zoomLevel}})`;
-            fullscreenImage.style.transform = `scale(${{zoomLevel}})`;
         }}
         
         function resetZoom() {{
             zoomLevel = 1;
             image.style.transform = 'scale(1)';
+        }}
+        
+        // Fullscreen zoom functions
+        function zoomInFs() {{
+            fsZoomLevel = Math.min(fsZoomLevel + 0.2, 5);
+            fullscreenImage.style.transform = `scale(${{fsZoomLevel}})`;
+        }}
+        
+        function zoomOutFs() {{
+            fsZoomLevel = Math.max(fsZoomLevel - 0.2, 0.5);
+            fullscreenImage.style.transform = `scale(${{fsZoomLevel}})`;
+        }}
+        
+        function resetFsZoom() {{
+            fsZoomLevel = 1;
             fullscreenImage.style.transform = 'scale(1)';
         }}
         
         // Fullscreen functions
         function toggleFullscreen() {{
             fullscreenContainer.style.display = 'flex';
+            resetFsZoom(); // Reset zoom when entering fullscreen
         }}
         
         function closeFullscreen() {{
@@ -524,23 +591,49 @@ def create_image_viewer_html(images, current_index):
         // Handle keyboard shortcuts
         document.addEventListener('keydown', function(e) {{
             // Prevent default behavior for navigation keys
-            if (['ArrowLeft', 'ArrowRight', 'a', 'd', '+', '-', '0', 'f'].includes(e.key)) {{
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'z', 'x', 'c', 'f'].includes(e.key)) {{
                 e.preventDefault();
             }}
+            
+            const isFullscreen = fullscreenContainer.style.display === 'flex';
             
             if (e.key === 'ArrowLeft' || e.key === 'a') {{
                 goToPrevious();
             }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
                 goToNext();
-            }} else if (e.key === '+' || e.key === '=') {{
-                zoomIn();
-            }} else if (e.key === '-') {{
-                zoomOut();
-            }} else if (e.key === '0') {{
-                resetZoom();
+            }} else if (e.key === 'ArrowUp') {{
+                if (isFullscreen) {{
+                    fullscreenContainer.scrollTop -= 100;
+                }} else {{
+                    viewer.scrollTop -= 100;
+                }}
+            }} else if (e.key === 'ArrowDown') {{
+                if (isFullscreen) {{
+                    fullscreenContainer.scrollTop += 100;
+                }} else {{
+                    viewer.scrollTop += 100;
+                }}
+            }} else if (e.key === 'z') {{
+                if (isFullscreen) {{
+                    zoomOutFs();
+                }} else {{
+                    zoomOut();
+                }}
+            }} else if (e.key === 'c') {{
+                if (isFullscreen) {{
+                    zoomInFs();
+                }} else {{
+                    zoomIn();
+                }}
+            }} else if (e.key === 'x') {{
+                if (isFullscreen) {{
+                    resetFsZoom();
+                }} else {{
+                    resetZoom();
+                }}
             }} else if (e.key === 'f') {{
                 toggleFullscreen();
-            }} else if (e.key === 'Escape' && fullscreenContainer.style.display === 'flex') {{
+            }} else if (e.key === 'Escape' && isFullscreen) {{
                 closeFullscreen();
             }}
         }});
@@ -550,11 +643,16 @@ def create_image_viewer_html(images, current_index):
         document.getElementById('next-overlay-{viewer_id}').addEventListener('click', goToNext);
         document.getElementById('prev-btn-{viewer_id}').addEventListener('click', goToPrevious);
         document.getElementById('next-btn-{viewer_id}').addEventListener('click', goToNext);
+        document.getElementById('fs-prev-btn-{viewer_id}').addEventListener('click', goToPrevious);
+        document.getElementById('fs-next-btn-{viewer_id}').addEventListener('click', goToNext);
         
         // Add zoom and fullscreen handlers
         document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
         document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
         document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
+        document.getElementById('fs-zoom-in-{viewer_id}').addEventListener('click', zoomInFs);
+        document.getElementById('fs-zoom-out-{viewer_id}').addEventListener('click', zoomOutFs);
+        document.getElementById('fs-zoom-reset-{viewer_id}').addEventListener('click', resetFsZoom);
         document.getElementById('fullscreen-btn-{viewer_id}').addEventListener('click', toggleFullscreen);
         document.getElementById('close-fullscreen-{viewer_id}').addEventListener('click', closeFullscreen);
         
@@ -563,13 +661,17 @@ def create_image_viewer_html(images, current_index):
             e.stopPropagation();
         }});
         
-        // Close fullscreen when clicking on the container
-        fullscreenContainer.addEventListener('click', closeFullscreen);
+        // Close fullscreen when clicking on the container, but not on the image
+        fullscreenContainer.addEventListener('click', function(e) {{
+            if (e.target === fullscreenContainer || e.target === fullscreenContent) {{
+                closeFullscreen();
+            }}
+        }});
         
         // Handle fragment identifier changes to maintain state on page refresh
         window.addEventListener('load', function() {{
             const fragment = window.location.hash;
-            const pageMatch = fragment.match(/#page=(\d+)/);
+            const pageMatch = fragment.match(/#page=(\\d+)/);
             if (pageMatch && pageMatch[1]) {{
                 const savedPage = parseInt(pageMatch[1]);
                 if (savedPage >= 0 && savedPage < totalImages && savedPage !== currentIndex) {{
@@ -578,8 +680,9 @@ def create_image_viewer_html(images, current_index):
             }}
         }});
         
-        // Initialize the page indicator
+        // Initialize the page indicators
         pageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
+        fsPageIndicator.textContent = `${{currentIndex + 1}} / ${{totalImages}}`;
     </script>
     """
     return html
@@ -818,9 +921,10 @@ with tab2:
                                 """
                                 - **Left Arrow** or **A**: Previous image
                                 - **Right Arrow** or **D**: Next image
-                                - **+** or **=**: Zoom in
-                                - **-**: Zoom out
-                                - **0**: Reset zoom
+                                - **Z**: Zoom out
+                                - **X**: Reset zoom
+                                - **C**: Zoom in
+                                - **Up/Down Arrows**: Scroll up/down when zoomed in
                                 - **F**: Toggle fullscreen
                                 - **Escape**: Exit fullscreen
                                 """
