@@ -1,5 +1,4 @@
 import glob
-import hashlib
 import os
 import re
 import time
@@ -7,8 +6,8 @@ import urllib.parse
 
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
+from PIL import Image
 
 # Set page config
 st.set_page_config(page_title="Manga Downloader", page_icon="📚", layout="wide")
@@ -257,163 +256,6 @@ def get_chapter_images(manga_title, chapter):
     return images
 
 
-# Create custom HTML for advanced image viewer
-def create_image_viewer_html(images, current_index):
-    """Create HTML for a custom image viewer with keyboard controls and zoom"""
-    if not images:
-        return "<p>No images available</p>"
-
-    current_image = images[current_index]
-    image_path = os.path.abspath(current_image)
-    image_path = image_path.replace("\\", "/")
-
-    # Create a unique ID for the viewer div to avoid caching issues
-    viewer_id = hashlib.md5(image_path.encode()).hexdigest()[:8]
-
-    html = f"""
-    <style>
-        #viewer-{viewer_id} {{
-            position: relative;
-            width: 100%;
-            height: 80vh;
-            margin: 0 auto;
-            text-align: center;
-            overflow: auto;
-        }}
-        #img-container-{viewer_id} {{
-            min-height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }}
-        #manga-image-{viewer_id} {{
-            max-width: 100%;
-            height: auto;
-            transform-origin: center;
-            transition: transform 0.2s;
-        }}
-        .controls {{
-            position: fixed;
-            bottom: 10px;
-            left: 0;
-            right: 0;
-            margin: auto;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            width: fit-content;
-            text-align: center;
-            user-select: none;
-        }}
-        .controls button {{
-            background: #4CAF50;
-            border: none;
-            color: white;
-            padding: 5px 10px;
-            margin: 0 5px;
-            cursor: pointer;
-            border-radius: 3px;
-        }}
-        .page-indicator {{
-            margin: 0 15px;
-            font-weight: bold;
-        }}
-        .zoom-controls {{
-            margin-left: 15px;
-        }}
-    </style>
-    
-    <div id="viewer-{viewer_id}">
-        <div id="img-container-{viewer_id}">
-            <img id="manga-image-{viewer_id}" src="file://{image_path}" alt="Manga page">
-        </div>
-    </div>
-    
-    <div class="controls">
-        <button id="prev-btn-{viewer_id}">◀ Previous</button>
-        <span class="page-indicator">{current_index + 1} / {len(images)}</span>
-        <button id="next-btn-{viewer_id}">Next ▶</button>
-        <span class="zoom-controls">
-            <button id="zoom-out-{viewer_id}">🔍-</button>
-            <button id="zoom-reset-{viewer_id}">🔍100%</button>
-            <button id="zoom-in-{viewer_id}">🔍+</button>
-        </span>
-    </div>
-    
-    <script>
-        // Current zoom level
-        let zoomLevel = 1;
-        
-        // Update Streamlit session state
-        const sendMessageToStreamlit = (index) => {{
-            window.parent.postMessage({{
-                type: "streamlit:setComponentValue",
-                value: index
-            }}, "*");
-        }};
-        
-        // Handle keyboard navigation
-        document.addEventListener('keydown', function(e) {{
-            if (e.key === 'ArrowLeft' || e.key === 'a') {{
-                if ({current_index} > 0) {{
-                    sendMessageToStreamlit({current_index - 1});
-                }}
-            }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
-                if ({current_index} < {len(images) - 1}) {{
-                    sendMessageToStreamlit({current_index + 1});
-                }}
-            }} else if (e.key === '+' || e.key === '=') {{
-                zoomIn();
-            }} else if (e.key === '-') {{
-                zoomOut();
-            }} else if (e.key === '0') {{
-                resetZoom();
-            }}
-        }});
-        
-        // Button click handlers
-        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} > 0) {{
-                sendMessageToStreamlit({current_index - 1});
-            }}
-        }});
-        
-        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
-            if ({current_index} < {len(images) - 1}) {{
-                sendMessageToStreamlit({current_index + 1});
-            }}
-        }});
-        
-        // Get the image element
-        const image = document.getElementById('manga-image-{viewer_id}');
-        
-        // Zoom functions
-        function zoomIn() {{
-            zoomLevel = Math.min(zoomLevel + 0.1, 3);
-            image.style.transform = `scale(${{zoomLevel}})`;
-        }}
-        
-        function zoomOut() {{
-            zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
-            image.style.transform = `scale(${{zoomLevel}})`;
-        }}
-        
-        function resetZoom() {{
-            zoomLevel = 1;
-            image.style.transform = 'scale(1)';
-        }}
-        
-        // Add click handlers for zoom buttons
-        document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
-        document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
-        document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
-    </script>
-    """
-    return html
-
-
 # Main UI
 st.title("Manga Chapter & Image Downloader")
 tab1, tab2 = st.tabs(["Download", "Browse"])
@@ -616,47 +458,94 @@ with tab2:
                     if not chapter_images:
                         st.info(f"No images found in {selected_chapter}")
                     else:
-                        # Image viewer with advanced controls
-                        total_images = len(chapter_images)
-
-                        # Check if we need to initialize the image index
+                        # Initialize session state for image viewing
                         if "image_index" not in st.session_state:
                             st.session_state.image_index = 0
 
                         # Ensure the index is within bounds
-                        if st.session_state.image_index >= total_images:
+                        if st.session_state.image_index >= len(chapter_images):
                             st.session_state.image_index = 0
 
-                        # Use the custom HTML viewer
-                        viewer_html = create_image_viewer_html(
-                            chapter_images, st.session_state.image_index
-                        )
-                        components.html(viewer_html, height=600, scrolling=True)
+                        # Display current image number and navigation controls
+                        col1, col2, col3 = st.columns([1, 3, 1])
+                        with col1:
+                            if st.button("⬅️ Previous"):
+                                st.session_state.image_index = max(
+                                    0, st.session_state.image_index - 1
+                                )
+                                st.rerun()
 
-                        # Get new index from the component callback using st.query_params
-                        if "image_index" in st.query_params:
-                            new_index = st.query_params["image_index"]
-                            if new_index is not None and new_index.isdigit():
-                                new_index = int(new_index)
-                                if (
-                                    0 <= new_index < total_images
-                                    and new_index != st.session_state.image_index
-                                ):
-                                    st.session_state.image_index = new_index
-                                    st.rerun()
-
-                        # Display info about keyboard shortcuts
-                        with st.expander("Keyboard Shortcuts"):
+                        with col2:
                             st.write(
-                                """
-                            - **Left Arrow** or **A**: Previous image
-                            - **Right Arrow** or **D**: Next image
-                            - **+** or **=**: Zoom in
-                            - **-**: Zoom out
-                            - **0**: Reset zoom
-                            """
+                                f"**Image {st.session_state.image_index + 1}/{len(chapter_images)}**"
                             )
 
-if __name__ == "__main__":
-    # This ensures the app runs directly when executed
-    pass
+                        with col3:
+                            if st.button("Next ➡️"):
+                                st.session_state.image_index = min(
+                                    len(chapter_images) - 1,
+                                    st.session_state.image_index + 1,
+                                )
+                                st.rerun()
+
+                        # Display the current image using Streamlit's native image component
+                        try:
+                            image_path = chapter_images[st.session_state.image_index]
+                            image = Image.open(image_path)
+
+                            # Create container for image with adjustable width
+                            img_container = st.container()
+
+                            # Add zoom control
+                            zoom_factor = st.slider(
+                                "Zoom", min_value=50, max_value=200, value=100, step=10
+                            )
+
+                            # Calculate new dimensions based on zoom
+                            orig_width, orig_height = image.size
+                            new_width = int(orig_width * zoom_factor / 100)
+
+                            # Display image with zoom applied
+                            with img_container:
+                                st.image(
+                                    image, width=new_width, use_container_width=False
+                                )
+
+                            # Add keyboard shortcut info
+                            with st.expander("Keyboard Navigation"):
+                                st.write(
+                                    """
+                                Use the buttons to navigate between images.
+                                Adjust the zoom slider to resize the image.
+                                
+                                Tip: You can also use keyboard shortcuts:
+                                - 'n' for next image
+                                - 'p' for previous image
+                                - Use the Home key to return to the first image
+                                """
+                                )
+
+                                # Check for keyboard input (limited functionality but gives some options)
+                                key_pressed = st.text_input(
+                                    "Press 'n' for next, 'p' for previous, 'h' for first image",
+                                    "",
+                                    key="key_input",
+                                )
+                                if key_pressed.lower() == "n":
+                                    st.session_state.image_index = min(
+                                        len(chapter_images) - 1,
+                                        st.session_state.image_index + 1,
+                                    )
+                                    st.rerun()
+                                elif key_pressed.lower() == "p":
+                                    st.session_state.image_index = max(
+                                        0, st.session_state.image_index - 1
+                                    )
+                                    st.rerun()
+                                elif key_pressed.lower() == "h":
+                                    st.session_state.image_index = 0
+                                    st.rerun()
+
+                        except Exception as e:
+                            st.error(f"Error loading image: {e}")
+                            st.info("Try selecting a different chapter or manga.")
