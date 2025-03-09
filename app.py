@@ -278,9 +278,9 @@ def get_image_data_url(file_path):
     return f"data:{mime_type};base64,{encoded_string}"
 
 
-# Create custom HTML for advanced image viewer with Streamlit buttons for navigation
+# Create custom HTML for advanced image viewer with Streamlit buttons for navigation and clickable sides
 def create_image_viewer_html(images, current_index):
-    """Create HTML for a custom image viewer with zoom using base64 images, but navigation through Streamlit"""
+    """Create HTML for a custom image viewer with zoom using base64 images, fullscreen mode, and clickable sides"""
     if not images:
         return "<p>No images available</p>"
 
@@ -307,14 +307,16 @@ def create_image_viewer_html(images, current_index):
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         }}
         #manga-image-{viewer_id} {{
             max-width: 100%;
             height: auto;
             transform-origin: center;
             transition: transform 0.2s;
+            z-index: 5;
         }}
-        .zoom-controls {{
+        .controls {{
             position: fixed;
             bottom: 10px;
             left: 0;
@@ -329,7 +331,7 @@ def create_image_viewer_html(images, current_index):
             text-align: center;
             user-select: none;
         }}
-        .zoom-controls button {{
+        .controls button {{
             background: #4CAF50;
             border: none;
             color: white;
@@ -338,37 +340,117 @@ def create_image_viewer_html(images, current_index):
             cursor: pointer;
             border-radius: 3px;
         }}
+        .page-indicator {{
+            margin: 0 15px;
+            font-weight: bold;
+        }}
+        .nav-overlay {{
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 50%;
+            z-index: 10;
+            cursor: pointer;
+            opacity: 0;
+        }}
+        #prev-overlay-{viewer_id} {{
+            left: 0;
+        }}
+        #next-overlay-{viewer_id} {{
+            right: 0;
+        }}
+        .fullscreen {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .fullscreen img {{
+            max-height: 95vh;
+            max-width: 95vw;
+        }}
+        .close-fullscreen {{
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }}
     </style>
     
     <div id="viewer-{viewer_id}">
         <div id="img-container-{viewer_id}">
             <img id="manga-image-{viewer_id}" src="{image_data_url}" alt="Manga page">
+            <div id="prev-overlay-{viewer_id}" class="nav-overlay"></div>
+            <div id="next-overlay-{viewer_id}" class="nav-overlay"></div>
         </div>
     </div>
     
-    <div class="zoom-controls">
-        <button id="zoom-out-{viewer_id}">🔍-</button>
-        <button id="zoom-reset-{viewer_id}">🔍100%</button>
-        <button id="zoom-in-{viewer_id}">🔍+</button>
+    <div id="fullscreen-container-{viewer_id}" style="display: none;" class="fullscreen">
+        <div class="close-fullscreen" id="close-fullscreen-{viewer_id}">×</div>
+        <img id="fullscreen-image-{viewer_id}" src="{image_data_url}" alt="Fullscreen manga page">
+    </div>
+    
+    <div class="controls">
+        <div>
+            <button id="zoom-out-{viewer_id}">🔍-</button>
+            <button id="zoom-reset-{viewer_id}">🔍100%</button>
+            <button id="zoom-in-{viewer_id}">🔍+</button>
+            <button id="fullscreen-btn-{viewer_id}">⛶ Fullscreen</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button id="prev-btn-{viewer_id}">◀ Previous</button>
+            <span class="page-indicator">{current_index + 1} / {len(images)}</span>
+            <button id="next-btn-{viewer_id}">Next ▶</button>
+        </div>
     </div>
     
     <script>
         // Current zoom level
         let zoomLevel = 1;
         
-        // Handle keyboard shortcuts for zooming only
+        // Get elements
+        const image = document.getElementById('manga-image-{viewer_id}');
+        const fullscreenContainer = document.getElementById('fullscreen-container-{viewer_id}');
+        const fullscreenImage = document.getElementById('fullscreen-image-{viewer_id}');
+        
+        // Update Streamlit session state
+        const sendMessageToStreamlit = (index) => {{
+            window.parent.postMessage({{
+                type: "streamlit:setComponentValue",
+                value: index
+            }}, "*");
+        }};
+        
+        // Handle keyboard shortcuts
         document.addEventListener('keydown', function(e) {{
-            if (e.key === '+' || e.key === '=') {{
+            if (e.key === 'ArrowLeft' || e.key === 'a') {{
+                if ({current_index} > 0) {{
+                    sendMessageToStreamlit({current_index - 1});
+                }}
+            }} else if (e.key === 'ArrowRight' || e.key === 'd') {{
+                if ({current_index} < {len(images) - 1}) {{
+                    sendMessageToStreamlit({current_index + 1});
+                }}
+            }} else if (e.key === '+' || e.key === '=') {{
                 zoomIn();
             }} else if (e.key === '-') {{
                 zoomOut();
             }} else if (e.key === '0') {{
                 resetZoom();
+            }} else if (e.key === 'f') {{
+                toggleFullscreen();
+            }} else if (e.key === 'Escape' && fullscreenContainer.style.display === 'flex') {{
+                closeFullscreen();
             }}
         }});
-        
-        // Get the image element
-        const image = document.getElementById('manga-image-{viewer_id}');
         
         // Zoom functions
         function zoomIn() {{
@@ -386,10 +468,55 @@ def create_image_viewer_html(images, current_index):
             image.style.transform = 'scale(1)';
         }}
         
-        // Add click handlers for zoom buttons
+        // Fullscreen functions
+        function toggleFullscreen() {{
+            fullscreenContainer.style.display = 'flex';
+        }}
+        
+        function closeFullscreen() {{
+            fullscreenContainer.style.display = 'none';
+        }}
+        
+        // Add navigation click handlers
+        document.getElementById('prev-overlay-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} > 0) {{
+                sendMessageToStreamlit({current_index - 1});
+            }}
+        }});
+        
+        document.getElementById('next-overlay-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} < {len(images) - 1}) {{
+                sendMessageToStreamlit({current_index + 1});
+            }}
+        }});
+        
+        // Add button click handlers
+        document.getElementById('prev-btn-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} > 0) {{
+                sendMessageToStreamlit({current_index - 1});
+            }}
+        }});
+        
+        document.getElementById('next-btn-{viewer_id}').addEventListener('click', function() {{
+            if ({current_index} < {len(images) - 1}) {{
+                sendMessageToStreamlit({current_index + 1});
+            }}
+        }});
+        
+        // Add click handlers for zoom and fullscreen buttons
+        document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
         document.getElementById('zoom-out-{viewer_id}').addEventListener('click', zoomOut);
         document.getElementById('zoom-reset-{viewer_id}').addEventListener('click', resetZoom);
-        document.getElementById('zoom-in-{viewer_id}').addEventListener('click', zoomIn);
+        document.getElementById('fullscreen-btn-{viewer_id}').addEventListener('click', toggleFullscreen);
+        document.getElementById('close-fullscreen-{viewer_id}').addEventListener('click', closeFullscreen);
+        
+        // Also allow clicking the fullscreen image to close it
+        fullscreenImage.addEventListener('click', function(e) {{
+            // Prevent the click from propagating to other elements
+            e.stopPropagation();
+        }});
+        
+        fullscreenContainer.addEventListener('click', closeFullscreen);
     </script>
     """
     return html
@@ -597,10 +724,10 @@ with tab2:
                     if not chapter_images:
                         st.info(f"No images found in {selected_chapter}")
                     else:
-                        # Image viewer with Streamlit navigation and JS zoom controls
+                        # Image viewer with improved controls
                         total_images = len(chapter_images)
 
-                        # Check if we need to initialize the image index
+                        # Initialize the session state for image index if it doesn't exist
                         if "image_index" not in st.session_state:
                             st.session_state.image_index = 0
 
@@ -608,41 +735,48 @@ with tab2:
                         if st.session_state.image_index >= total_images:
                             st.session_state.image_index = 0
 
-                        # Add Streamlit navigation buttons before the image viewer
-                        col1, col2, col3 = st.columns([1, 3, 1])
+                        # Create a unique key for this component
+                        component_key = f"{selected_manga}_{selected_chapter}_{st.session_state.image_index}"
 
-                        with col1:
-                            if st.button("◀ Previous"):
-                                if st.session_state.image_index > 0:
-                                    st.session_state.image_index -= 1
-                                    st.rerun()
-
-                        with col2:
-                            st.write(
-                                f"**Page {st.session_state.image_index + 1} of {total_images}**"
-                            )
-
-                        with col3:
-                            if st.button("Next ▶"):
-                                if st.session_state.image_index < total_images - 1:
-                                    st.session_state.image_index += 1
-                                    st.rerun()
-
-                        # Use the modified HTML viewer (no navigation, just zoom)
+                        # Use the improved HTML viewer with clickable sides
                         viewer_html = create_image_viewer_html(
                             chapter_images, st.session_state.image_index
                         )
-                        components.html(viewer_html, height=600, scrolling=True)
+
+                        # Get the new index from the component
+                        new_index = components.html(
+                            viewer_html, height=800, scrolling=True
+                        )
+
+                        # Check if we received a value from the component
+                        if new_index is not None and isinstance(
+                            new_index, (int, float)
+                        ):
+                            new_index = int(new_index)
+                            # Check if the new index is valid and different
+                            if (
+                                0 <= new_index < total_images
+                                and new_index != st.session_state.image_index
+                            ):
+                                # Update the session state
+                                st.session_state.image_index = new_index
+                                # Trigger a rerun to update the view
+                                st.rerun()
 
                         # Display info about keyboard shortcuts
                         with st.expander("Keyboard Shortcuts"):
                             st.write(
                                 """
+                            - **Left Arrow** or **A**: Previous image
+                            - **Right Arrow** or **D**: Next image
                             - **+** or **=**: Zoom in
                             - **-**: Zoom out
                             - **0**: Reset zoom
+                            - **F**: Toggle fullscreen
+                            - **Escape**: Exit fullscreen
                             """
                             )
+
 
 if __name__ == "__main__":
     # This ensures the app runs directly when executed
